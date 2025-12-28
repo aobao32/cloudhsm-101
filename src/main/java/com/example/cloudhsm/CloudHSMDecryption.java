@@ -3,7 +3,7 @@ package com.example.cloudhsm;
 import com.amazonaws.cloudhsm.jce.provider.CloudHsmProvider;
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
-import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.GCMParameterSpec;
 import java.security.KeyStore;
 import java.security.Security;
 import java.util.Base64;
@@ -32,12 +32,12 @@ public class CloudHSMDecryption {
             String keyLabel = "MyAES256Key";
 
             // 预定义的密文
-            String ciphertext = "ndvBE35TZKNZ3uDW3Bl4M/i/aOkPdKbkZkm92Mumuq9iFQgkS5jO9VBIwb7FS9FYDERcaUTO7w1L6pjYNgaVzQ==";
+            String ciphertext = "HRGNyxEjx5IUq6Ztr4+b/U4y0BeB/tcBBgWOe00wlgYpg7W+87pGw/sYsyVD4AqXhDsueQWpnk38jRITUildD2q2JA==";
 
             System.out.println("=== CloudHSM 解密信息 ===");
             System.out.println("密钥类型: AES-256");
             System.out.println("密钥标签: " + keyLabel);
-            System.out.println("密钥长度: 256位 (32字节)");
+            System.out.println("解密算法: AES-256-GCM");
             System.out.println();
 
             SecretKey key = findKeyByLabel(keyLabel);
@@ -70,20 +70,20 @@ public class CloudHSMDecryption {
     }
 
     private static String decryptString(String ciphertext, SecretKey key) throws Exception {
-        // Base64 解码
         byte[] combined = Base64.getDecoder().decode(ciphertext);
 
-        // 提取 IV（前16字节）
-        byte[] iv = new byte[16];
-        System.arraycopy(combined, 0, iv, 0, 16);
+        // 提取 IV（前12字节，GCM标准）
+        byte[] iv = new byte[12];
+        System.arraycopy(combined, 0, iv, 0, 12);
 
-        // 提取加密数据（剩余部分）
-        byte[] encrypted = new byte[combined.length - 16];
-        System.arraycopy(combined, 16, encrypted, 0, encrypted.length);
+        // 提取加密数据（含认证标签）
+        byte[] encrypted = new byte[combined.length - 12];
+        System.arraycopy(combined, 12, encrypted, 0, encrypted.length);
 
-        // 解密
-        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding", CloudHsmProvider.PROVIDER_NAME);
-        cipher.init(Cipher.DECRYPT_MODE, key, new IvParameterSpec(iv));
+        // AES-GCM解密
+        GCMParameterSpec gcmSpec = new GCMParameterSpec(128, iv);
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding", CloudHsmProvider.PROVIDER_NAME);
+        cipher.init(Cipher.DECRYPT_MODE, key, gcmSpec);
         byte[] decrypted = cipher.doFinal(encrypted);
 
         return new String(decrypted, "UTF-8");

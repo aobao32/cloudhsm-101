@@ -3,9 +3,7 @@ package com.example.cloudhsm;
 import com.amazonaws.cloudhsm.jce.provider.CloudHsmProvider;
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
-import javax.crypto.spec.IvParameterSpec;
 import java.security.KeyStore;
-import java.security.SecureRandom;
 import java.security.Security;
 import java.util.Base64;
 
@@ -38,7 +36,7 @@ public class CloudHSMEncryption {
             System.out.println("=== CloudHSM 加密信息 ===");
             System.out.println("密钥类型: AES-256");
             System.out.println("密钥标签: " + keyLabel);
-            System.out.println("密钥长度: 256位 (32字节)");
+            System.out.println("加密算法: AES-256-GCM");
             System.out.println();
 
             SecretKey key = findKeyByLabel(keyLabel);
@@ -71,14 +69,14 @@ public class CloudHSMEncryption {
     }
     
     private static String encryptString(String plaintext, SecretKey key) throws Exception {
-        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding", CloudHsmProvider.PROVIDER_NAME);
-        
-        byte[] iv = new byte[16];
-        new SecureRandom().nextBytes(iv);
-        
-        cipher.init(Cipher.ENCRYPT_MODE, key, new IvParameterSpec(iv));
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding", CloudHsmProvider.PROVIDER_NAME);
+        cipher.init(Cipher.ENCRYPT_MODE, key);
         byte[] encrypted = cipher.doFinal(plaintext.getBytes("UTF-8"));
         
+        // IV由HSM生成
+        byte[] iv = cipher.getIV();
+        
+        // 输出格式: IV(12字节) + 密文(含认证标签)
         byte[] result = new byte[iv.length + encrypted.length];
         System.arraycopy(iv, 0, result, 0, iv.length);
         System.arraycopy(encrypted, 0, result, iv.length, encrypted.length);
