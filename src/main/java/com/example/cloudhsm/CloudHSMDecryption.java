@@ -32,7 +32,7 @@ public class CloudHSMDecryption {
             String keyLabel = "MyAES256Key";
 
             // 预定义的密文
-            String ciphertext = "HRGNyxEjx5IUq6Ztr4+b/U4y0BeB/tcBBgWOe00wlgYpg7W+87pGw/sYsyVD4AqXhDsueQWpnk38jRITUildD2q2JA==";
+            String ciphertext = "Wejrhl+SZ6FBj1c7lDyVnV9ZCIkJZYvhZPK2d0duWtCl0jvEnqnFzMIOyYXtPfb86oBVBsIwNrwugR7Iv5ypJFFeEg==";
 
             System.out.println("=== CloudHSM 解密信息 ===");
             System.out.println("密钥类型: AES-256");
