@@ -256,7 +256,33 @@ java -jar target/cloudhsm-decryption-1.0-SNAPSHOT.jar
 
 本章节代码见本文开头Github的：src/main/java/com/example/cloudhsm/CloudHSMKeyDerivation.java。
 
-在IoT场景中，所有设备使用唯一的主密钥进行加密可能不够安全，每个设备都分配一个独立的密钥这样管理成本又很高，且在数十万设备时候会超出CloudHSM集群存储的密钥数量上限。此时的办法可将设备的唯一标识、网卡MAC地址作为参数，使用密钥派生算法（KSF）生成新的派生密钥作为本设备的唯一密钥。本文的例子是HKDF-SHA384，由此可保证每个设备都有独一无二的密钥，且本密钥可随时由主密钥和设备唯一信息推导生成。在本例中，我们直接将派生密钥（即针对每个IoT设备的设备密钥）直接明文方式生成交给应用程序进行后一步处理。
+在IoT场景中，所有设备使用唯一的主密钥进行加密可能不够安全，每个设备都分配一个独立的密钥这样管理成本又很高，且在数十万设备时候会超出CloudHSM集群存储的密钥数量上限。此时的办法可将设备的唯一标识、网卡MAC地址作为参数，使用密钥派生算法（KDF）生成新的派生密钥作为本设备的唯一密钥。
+
+主要过程是：
+
+- （1）应用程序将设备唯一标识符（设备ID和MAC地址）传入CloudHSM；
+- （2）CloudHSM内部使用主密钥Master Key和设备标识符，通过HKDF-SHA384算法进行密钥派生；
+- （3）派生出的设备密钥以明文形式返回给应用程序；
+- （4）应用程序获得32字节的设备专用密钥，可用于后续的加解密操作。
+
+流程如下：
+
+```shell
+  ┌─────────────┐
+  │ 主密钥(HSM)  │  AES-256 (MyAES256Key)
+  └──────┬──────┘
+         │ HKDF-SHA384
+         │ (设备ID + MAC)
+         ▼
+  ┌─────────────┐
+  │ 派生密钥     │  32字节明文密钥
+  │ (返回应用)   │  返回给应用程序
+  └─────────────┘
+```
+
+本文的例子使用HKDF-SHA384算法，由此可保证每个设备都有独一无二的密钥，且本密钥可随时由主密钥和设备唯一信息推导生成。在本例中，我们直接将派生密钥（即针对每个IoT设备的设备密钥）以明文方式返回给应用程序进行后续处理。
+
+这种方式的优点是管理灵活，CloudHSM只需要进行密钥派生操作，无需承担大量的加解密计算负载，适合数十万IoT设备的高并发场景。但缺点是派生密钥会暴露给应用程序，安全性相对较低。
 
 在确保前文整体maven构建成功的情况下，在target目录内已经有现成的jar包，可直接运行。
 
@@ -270,7 +296,7 @@ java -jar target/cloudhsm-keyderivation-1.0-SNAPSHOT.jar
 返回结果如下：
 
 ```shell
-使用用户 user01 连接到CloudHSM...
+使用用户: user01 连接到CloudHSM...
 === CloudHSM 密钥派生信息 ===
 主密钥类型: AES-256
 主密钥标签: MyAES256Key
@@ -285,9 +311,9 @@ Base64: g6gT9acPOGerJ8Xj2HFQJnMK97Qu0j57qm1+LgvEX54=
 密钥派生成功！
 ```
 
-由此看到派生密钥成功。
+由此看到派生密钥成功生成并以明文形式返回给应用程序。应用程序可以使用这个32字节的设备专用密钥进行后续的加解密操作。
 
-### 6、使用KDF算法生成派生密钥并以临时Key的方式在CloudHSM内进行加密、解密
+### 6、在CloudHSM内以Session Key方式进行密钥派生并加密、解密
 
 本章节代码见本文开头Github的：src/main/java/com/example/cloudhsm/CloudHSMSessionKeyEncrypt.java和CloudHSMSessionKeyDecrypt.java。
 
@@ -295,33 +321,28 @@ Base64: g6gT9acPOGerJ8Xj2HFQJnMK97Qu0j57qm1+LgvEX54=
 
 主要过程是：
 
-- 1) 用主密钥Master Key对设备唯一标识符（如MAC地址）进行KDF派生算法，在CloudHSM内部计算获得派生后的设备密钥；
-- 2) 设备密钥以Session Key临时密钥的方式保存在CloudHSM中，此时会占用CloudHSM的密钥存储槽位一个，但是占用时长仅限本Session；
-- 3）应用端传入要加密的数据，在CloudHSM内部使用设备密钥完成加密，密文返回给应用端；
-- 4）释放Session，此时CloudHSM内的Session Key将释放不会占用存储槽位，而永久保存的密钥依然只有主密钥Master Key一个。
+- （1）用主密钥Master Key对设备唯一标识符（如设备ID和MAC地址）进行AES-CMAC KDF派生算法，在CloudHSM内部计算获得派生后的设备密钥；
+- （2）设备密钥以Session Key临时密钥的方式保存在CloudHSM中，此时会占用CloudHSM的密钥存储槽位一个，但是占用时长仅限本Session；
+- （3）应用端传入要加密的数据，在CloudHSM内部使用设备密钥完成加密，密文返回给应用端；
+- （4）释放Session，此时CloudHSM内的Session Key将释放不会占用存储槽位，而永久保存的密钥依然只有主密钥Master Key一个。
 
 流程如下：
 
 ```shell
   ┌─────────────┐
-  │ 主密钥(HSM) │  AES-256 (MyAES256Key)
+  │ 主密钥(HSM)  │  AES-256 (MyAES256Key)
   └──────┬──────┘
-         │ HKDF-SHA384
+         │ AES-CMAC KDF
          │ (设备ID + MAC)
          ▼
   ┌─────────────┐
-  │ 派生32字节  │  原始密钥材料
-  └──────┬──────┘
-         │ 导入为SecretKey
-         ▼
-  ┌─────────────┐
-  │设备密钥(HSM)│  AES-256 (DEVICE_xxx)
-  │ TOKEN=true  │
+  │设备密钥(HSM) │  AES-256 (DEVICE_xxx)
+  │ TOKEN=false │  Session Key，不持久化
   └──────┬──────┘
          │ AES-GCM加密
          ▼
   ┌─────────────┐
-  │ 业务数据密文│  IV(12) + Ciphertext + Tag(16)
+  │ 业务数据密文  │  IV(12) + [加密数据 + 认证标签(16)]
   └─────────────┘
 ```
 
@@ -339,17 +360,17 @@ java -jar target/cloudhsm-sessionkey-encrypt-1.0-SNAPSHOT.jar
 返回结果如下：
 
 ```shell
-使用用户 user01 连接到CloudHSM...
+使用用户: user01 连接到CloudHSM...
 
 === Session Key 派生完成 ===
 设备ID: DEVICE123456
 设备MAC: AA:BB:CC:DD:EE:FF
 
 === AES-256-GCM 加密结果 ===
-密文 (Base64): m7OVZRJ2fh3exj/E7X12aX7NNSgz81cko9Nxnr9qL7h/Y9iTagWS2iVyR0ojgBXgmEh+Yj0CpHAepAUebQq0hMDZvw==
+密文 (Base64): 0oEcvVTi/Tlv8sJM0R6uauul4MCmkApBu5NEojjKjkGSCXhRpWrcHrV5c411dAsGr0ZRUGkYjEURks+TqW2SFddrNA==
 ```
 
-注意这里加密后的密钥，算法是`Base64(IV[12字节] + 密文 + 认证标签[16字节])`。由此看到派生后的Session Key在CloudHSM内加密成功。
+由此看到派生后的Session Key在CloudHSM内加密成功。
 
 接下来测试解密，将这个密文更新到`CloudHSMSessionKeyDecrypt.java`代码中的密文，然后重新构建，并执行：
 
@@ -357,13 +378,13 @@ java -jar target/cloudhsm-sessionkey-encrypt-1.0-SNAPSHOT.jar
 mvn clean package
 export HSM_USER=user01
 export HSM_PASSWORD=1qazxsw2
-java -jar target/cloudhsm-sessionkey-decrypt-1.0-SNAPSHOT.jar
+java -cp target/cloudhsm-sessionkey-encrypt-1.0-SNAPSHOT.jar com.example.cloudhsm.CloudHSMSessionKeyDecrypt
 ```
 
-解密完成：
+解密后返回提示信息：
 
 ```shell
-使用用户 user01 连接到CloudHSM...
+使用用户: user01 连接到CloudHSM...
 
 === Session Key 派生完成 ===
 设备ID: DEVICE123456
@@ -372,23 +393,6 @@ java -jar target/cloudhsm-sessionkey-decrypt-1.0-SNAPSHOT.jar
 === AES-256-GCM 解密结果 ===
 明文: Hello CloudHSM! This is a test message.
 ```
-
-在本例中，除了使用AES-256-GCM算法外，还是用了AAD功能。AAD (Additional Authenticated Data) 是 GCM 模式的附加认证数据，用于**验证但不加密**的数据。
-
-AAD作用：
-- AAD 会参与认证标签的计算，但本身不会被加密
-- 解密时必须提供相同的 AAD，否则认证失败，解密报错
-- 用于绑定密文与上下文，防止密文被挪用到其他场景
-
-AAD典型用途：
-- 消息头信息（发送者ID、时间戳、消息类型）
-- 数据库记录的主键
-- 文件路径或资源标识符
-
-示例场景：
-AAD = "user_id=12345|timestamp=2024-12-28"
-
-即使攻击者获取了密文，也无法将其用于其他用户或时间点，因为 AAD 不匹配会导致解密失败。如果不需要这个功能，可以移除 cipher.updateAAD() 调用，或使用空字符串。但保留它是更安全的做法。
 
 由此派生算法的例子完成。
 

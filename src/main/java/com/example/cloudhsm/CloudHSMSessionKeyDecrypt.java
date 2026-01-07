@@ -3,8 +3,9 @@ package com.example.cloudhsm;
 import com.amazonaws.cloudhsm.jce.provider.CloudHsmProvider;
 import com.amazonaws.cloudhsm.jce.provider.attributes.KeyAttribute;
 import com.amazonaws.cloudhsm.jce.provider.attributes.KeyAttributesMap;
+import com.amazonaws.cloudhsm.jce.provider.AesCmacKdfFixedInputData;
+import com.amazonaws.cloudhsm.jce.provider.AesCmacKdfParameterSpec;
 import javax.crypto.Cipher;
-import javax.crypto.Mac;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.GCMParameterSpec;
@@ -18,7 +19,7 @@ public class CloudHSMSessionKeyDecrypt {
     private static final String DEVICE_MAC = "AA:BB:CC:DD:EE:FF";
     
     // 从加密程序输出中获取的密文（包含IV）
-    private static final String CIPHERTEXT_BASE64 = "m7OVZRJ2fh3exj/E7X12aX7NNSgz81cko9Nxnr9qL7h/Y9iTagWS2iVyR0ojgBXgmEh+Yj0CpHAepAUebQq0hMDZvw==";
+    private static final String CIPHERTEXT_BASE64 = "0oEcvVTi/Tlv8sJM0R6uauul4MCmkApBu5NEojjKjkGSCXhRpWrcHrV5c411dAsGr0ZRUGkYjEURks+TqW2SFddrNA==";
     private static final String AAD = "additional-auth-data";
     
     public static void main(String[] args) {
@@ -76,21 +77,23 @@ public class CloudHSMSessionKeyDecrypt {
     }
     
     private static SecretKey deriveSessionKey(SecretKey masterKey, String deviceId, String deviceMac) throws Exception {
-        Mac hmac = Mac.getInstance("HmacSHA384", CloudHsmProvider.PROVIDER_NAME);
-        hmac.init(masterKey);
-        byte[] derivedBytes = hmac.doFinal((deviceId + "|" + deviceMac).getBytes("UTF-8"));
-        
-        byte[] keyBytes = new byte[32];
-        System.arraycopy(derivedBytes, 0, keyBytes, 0, 32);
-        
+        // 设置派生密钥属性：临时密钥
         KeyAttributesMap keyAttrs = new KeyAttributesMap();
-        keyAttrs.put(KeyAttribute.LABEL, "DerivedSessionKey");
-        keyAttrs.put(KeyAttribute.TOKEN, false);
-        keyAttrs.put(KeyAttribute.EXTRACTABLE, false);
+        keyAttrs.put(KeyAttribute.LABEL, "DEVICE_" + deviceId);
+        keyAttrs.put(KeyAttribute.SIZE, 256);
+        keyAttrs.put(KeyAttribute.TOKEN, false);        // Session Key，不持久化
         keyAttrs.put(KeyAttribute.ENCRYPT, true);
         keyAttrs.put(KeyAttribute.DECRYPT, true);
-        keyAttrs.put(KeyAttribute.VALUE, keyBytes);
         
-        return SecretKeyFactory.getInstance("AES", CloudHsmProvider.PROVIDER_NAME).generateSecret(keyAttrs);
+        // 构造派生输入数据
+        byte[] label = (deviceId + "|" + deviceMac).getBytes("UTF-8");
+        byte[] context = new byte[0];
+        AesCmacKdfFixedInputData fixedInputData = new AesCmacKdfFixedInputData(32, label, context);
+        
+        // 使用AES-CMAC KDF在HSM内部派生密钥
+        AesCmacKdfParameterSpec kdfSpec = new AesCmacKdfParameterSpec(keyAttrs, fixedInputData, masterKey);
+        
+        SecretKeyFactory factory = SecretKeyFactory.getInstance("AES", CloudHsmProvider.PROVIDER_NAME);
+        return factory.generateSecret(kdfSpec);
     }
 }

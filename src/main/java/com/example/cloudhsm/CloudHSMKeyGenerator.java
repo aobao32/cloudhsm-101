@@ -60,6 +60,7 @@ public class CloudHSMKeyGenerator {
         aesSpec.put(KeyAttribute.SIZE, 256);                 // 密钥长度：256位
         aesSpec.put(KeyAttribute.EXTRACTABLE, false);        // 密钥不可提取（更安全）
         aesSpec.put(KeyAttribute.TOKEN, true);               // 持久化存储在 HSM 中
+        aesSpec.put(KeyAttribute.DERIVE, true);              // 允许用于密钥派生
         
         // 初始化 KeyGenerator
         keyGen.init(aesSpec);
