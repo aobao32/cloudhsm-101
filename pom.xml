@@ -531,6 +531,41 @@
                                     <finalName>cloudhsm-ec-private-key-import-from-pem-${project.version}</finalName>
                                 </configuration>
                             </execution>
+                            <!-- 执行14：构建通过Key Reference ID加密程序 -->
+                            <execution>
+                                <id>encryption-by-keyrefid-jar</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>shade</goal>
+                                </goals>
+                                <configuration>
+                                    <createDependencyReducedPom>false</createDependencyReducedPom>
+                                    <shadedArtifactAttached>true</shadedArtifactAttached>
+                                    <shadedClassifierName>encryption-by-keyrefid</shadedClassifierName>
+                                    <transformers>
+                                        <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                            <mainClass>com.example.cloudhsm.CloudHSMEncryptionByKeyRefID</mainClass>
+                                        </transformer>
+                                    </transformers>
+                                    <filters>
+                                        <filter>
+                                            <artifact>*:*</artifact>
+                                            <excludes>
+                                                <exclude>META-INF/*.SF</exclude>
+                                                <exclude>META-INF/*.DSA</exclude>
+                                                <exclude>META-INF/*.RSA</exclude>
+                                                <exclude>META-INF/MANIFEST.MF</exclude>
+                                            </excludes>
+                                        </filter>
+                                    </filters>
+                                    <artifactSet>
+                                        <includes>
+                                            <include>*:*</include>
+                                        </includes>
+                                    </artifactSet>
+                                    <finalName>cloudhsm-encryption-by-keyrefid-${project.version}</finalName>
+                                </configuration>
+                            </execution>
                         </executions>
                     </plugin>
                 </plugins>

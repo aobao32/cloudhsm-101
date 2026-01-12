@@ -396,6 +396,23 @@ java -cp target/cloudhsm-sessionkey-encrypt-1.0-SNAPSHOT.jar com.example.cloudhs
 
 由此派生算法的例子完成。
 
+### 7、在CloudHSM内删除密钥
+
+要删除密钥，必须以CU（Crypto User）身份登录，且只有密钥创建者可以删除密钥。本例中，刚才以user01的身份创建的密钥，那么执行如下命令：
+
+```shell
+/opt/cloudhsm/bin/cloudhsm-cli interactive
+login --username user01 --role crypto-user
+```
+
+以Lable为标记删除密钥，命令如下：
+
+```shell
+key delete --filter key-reference=0x0000000000003773
+```
+
+然后即可删除。
+
 ## 二、在CloudHSM上使用Key Wrap和Unwrap做密钥导入导出
 
 ### 1、密钥导出机制
