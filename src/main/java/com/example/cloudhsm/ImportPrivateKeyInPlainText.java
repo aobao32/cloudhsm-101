@@ -15,7 +15,7 @@ import java.util.Base64;
  * 从PEM文件导入EC私钥到CloudHSM
  * 支持设置自定义标签和永久密钥属性
  */
-public class ECPrivateKeyImportFromPEM {
+public class ImportPrivateKeyInPlainText {
     
     public static void main(String[] args) {
         try {

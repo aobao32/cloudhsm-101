@@ -53,7 +53,7 @@ git clone git@github.com:aobao32/cloudhsm-101.git
 cd cloudhsm-101/
 ```
 
-在编译环节，为了运行环境无须安装CloudHSM JCE Provider SDK，因此会编译far-jar，将所有库打包到一个jar包。因此需要将cloudhsm的jce的jar包集成到mvn本地库。
+在编译环节，为了运行环境无须安装CloudHSM JCE Provider SDK，因此会编译fat-jar，将所有库打包到一个jar包。因此需要将cloudhsm的jce的jar包集成到mvn本地库。
 
 ```shell
 mvn install:install-file \
@@ -91,7 +91,7 @@ mvn clean package
 
 本章节代码见本文开头Github的：src/main/java/com/example/cloudhsm/CloudHSMKeyGenerator.java。
 
-如果您此时CloudHSM集群是单节点的测试集群，还要额外使用`--disable-key-availability-check`命令。否则后续会报告`Cannot perform the requested key operation as the key must be available on at least 2 HSMs`。设置单节点运行禁用可用性检查：
+如果您此时CloudHSM集群是单节点的测试集群，还要额外使用`--disable-key-availability-check`参数。否则后续会报告`Cannot perform the requested key operation as the key must be available on at least 2 HSMs`。设置单节点运行禁用可用性检查：
 
 ```shell
 sudo /opt/cloudhsm/bin/configure-jce --disable-key-availability-check
@@ -121,9 +121,9 @@ AES256 密钥创建成功！
 
 可看到密钥创建成功。
 
-为了验证密钥创建成功，可通过CloudHSM CLI登陆，查看刚创建的密钥是否存在。
+为了验证密钥创建成功，可通过CloudHSM CLI登录，查看刚创建的密钥是否存在。
 
-现在使用cloudhsm-cli登陆去确认密钥创建成功。如果您的集群是单节点，还要额外增加一条`--disable-key-availability-check`命令。否则后续查询时候回报告`Cannot perform the requested key operation as the key must be available on at least 2 HSMs`。接下来执行如下命令登陆：
+现在使用cloudhsm-cli登录去确认密钥创建成功。如果您的集群是单节点，还要额外增加一条`--disable-key-availability-check`参数。否则后续查询时候会报告`Cannot perform the requested key operation as the key must be available on at least 2 HSMs`。接下来执行如下命令登录：
 
 ```shell
 sudo /opt/cloudhsm/bin/configure-cli --disable-key-availability-check
@@ -135,7 +135,7 @@ key list --verbose
 由此即可显示详细密钥属性：
 
 ```shell
-ws-cloudhsm > key list --verbose
+aws-cloudhsm > key list --verbose
 {
   "error_code": 0,
   "data": {
@@ -252,6 +252,8 @@ java -jar target/cloudhsm-decryption-1.0-SNAPSHOT.jar
 解密成功！
 ```
 
+备注：以上代码示例中，使用的是密钥的Label标签属性。但Label是不唯一的，可以生成重名密钥。在CloudHSM内，密钥的唯一标识是Key Reference ID，因此可使用这个唯一ID来避免重名问题。本文开头Github的：src/main/java/com/example/cloudhsm/CloudHSMEncryptionByKeyRefID.java 这段代码就是以Key Reference ID为例进行的调用。
+
 ### 5、使用KDF算法生成派生密钥并明文返回给客户端
 
 本章节代码见本文开头Github的：src/main/java/com/example/cloudhsm/CloudHSMKeyDerivation.java。
@@ -269,14 +271,14 @@ java -jar target/cloudhsm-decryption-1.0-SNAPSHOT.jar
 
 ```shell
   ┌─────────────┐
-  │ 主密钥(HSM)  │  AES-256 (MyAES256Key)
+  │ 主密钥(HSM) │  AES-256 (MyAES256Key)
   └──────┬──────┘
          │ HKDF-SHA384
          │ (设备ID + MAC)
          ▼
   ┌─────────────┐
-  │ 派生密钥     │  32字节明文密钥
-  │ (返回应用)   │  返回给应用程序
+  │ 派生密钥    │  32字节明文密钥
+  │ (返回应用)  │  返回给应用程序
   └─────────────┘
 ```
 
@@ -330,7 +332,7 @@ Base64: g6gT9acPOGerJ8Xj2HFQJnMK97Qu0j57qm1+LgvEX54=
 
 ```shell
   ┌─────────────┐
-  │ 主密钥(HSM)  │  AES-256 (MyAES256Key)
+  │ 主密钥(HSM) │  AES-256 (MyAES256Key)
   └──────┬──────┘
          │ AES-CMAC KDF
          │ (设备ID + MAC)
@@ -342,7 +344,7 @@ Base64: g6gT9acPOGerJ8Xj2HFQJnMK97Qu0j57qm1+LgvEX54=
          │ AES-GCM加密
          ▼
   ┌─────────────┐
-  │ 业务数据密文  │  IV(12) + [加密数据 + 认证标签(16)]
+  │ 业务数据密文│  IV(12) + [加密数据 + 认证标签(16)]
   └─────────────┘
 ```
 
@@ -396,23 +398,6 @@ java -cp target/cloudhsm-sessionkey-encrypt-1.0-SNAPSHOT.jar com.example.cloudhs
 
 由此派生算法的例子完成。
 
-### 7、在CloudHSM内删除密钥
-
-要删除密钥，必须以CU（Crypto User）身份登录，且只有密钥创建者可以删除密钥。本例中，刚才以user01的身份创建的密钥，那么执行如下命令：
-
-```shell
-/opt/cloudhsm/bin/cloudhsm-cli interactive
-login --username user01 --role crypto-user
-```
-
-以Lable为标记删除密钥，命令如下：
-
-```shell
-key delete --filter key-reference=0x0000000000003773
-```
-
-然后即可删除。
-
 ## 二、在CloudHSM上使用Key Wrap和Unwrap做密钥导入导出
 
 ### 1、密钥导出机制
@@ -464,14 +449,14 @@ Master Key创建成功！
 
 ### 3、通过CloudHSM CLI检索Master Key并设置属性为Trusted Key
 
-先以普通加密用户身份登陆CloudHSM，检索密钥详细信息。这是由于CloudHSM管理员模式不能用于密钥检索等日常操作，日常检索密钥必须使用`crypto-user`级别的用户。
+先以普通加密用户身份登录CloudHSM，检索密钥详细信息。这是由于CloudHSM管理员模式不能用于密钥检索等日常操作，日常检索密钥必须使用`crypto-user`级别的用户。
 
 ```shell
 /opt/cloudhsm/bin/cloudhsm-cli interactive
 login --username user01 --role crypto-user
 ```
 
-输入密码后，登陆完成。执行如下命令检索刚才创建的lable是`new-master-key`的主密钥。
+输入密码后，登录完成。执行如下命令检索刚才创建的label是`new-master-key`的主密钥。
 
 ```shell
 key list --filter attr.label=new-master-key
@@ -497,7 +482,7 @@ key list --filter attr.label=new-master-key
 }
 ```
 
-这里可以看到搜索结果，`lable`标签是`new-master-key`的密钥对应的`key-reference`是`0x0000000000000ca5`，记录下来并代入下边的命令，查看详细属性。
+这里可以看到搜索结果，`label`标签是`new-master-key`的密钥对应的`key-reference`是`0x0000000000000ca5`，记录下来并代入下边的命令，查看详细属性。
 
 ```shell
 key list --filter key-reference=0x0000000000000ca5 --verbose
@@ -562,7 +547,7 @@ key list --filter key-reference=0x0000000000000ca5 --verbose
 
 可以看到当前属性`"trusted": false`。接下来要切换到管理员身份，为其设置信任。执行`quit`命令退出当前普通用户身份。
 
-以管理员身份使用CloudHSM CLI登陆：
+以管理员身份使用CloudHSM CLI登录：
 
 ```shell
 /opt/cloudhsm/bin/cloudhsm-cli interactive
@@ -660,7 +645,431 @@ Session结束，data key已从CloudHSM中释放
 
 由此可以看到，Unwrap后的Key解密成功。
 
-## 三、参考文档
+## 三、使用非对称密钥和Unwrap机制实现私钥迁移到CloudHSM
+
+### 1、私钥迁移背景
+
+假设AWS云之外的受保护的位置有一个Private Key即被迁移的私钥，这个Private Key当前以明文形式存在，不过这个环境受到高度保护，明文是不允许离开这个环境的。现在，业务要求将这个Private Key从当前位置导入到海外的AWS CloudHSM加密机内部。由于受到明文不准离开保护范围的制约，需要有一种加密导入/导出机制来完成这个私钥迁移。
+
+为此我们设计如下一种策略：
+
+- 在AWS海外的CloudHSM生成一个非对称密钥叫做migration key，将private key私钥保存在CloudHSM加密机内，将public key公钥导出；
+- 将上一步migration key的public key传输到AWS云之外受保护的环境内，用这个public key对被迁移的private key做加密，获得private key的密文，并将这个密文放到海外AWS云上可操作CloudHSM加密机的环境内（管理用虚拟机上）
+- 在CloudHSM上执行Key unwrap操作，使用migration key的private key解密，将被迁移的key的密文解密，获得被迁移的private key明文，此时明文仅保存在CloudHSM加密机内，加密机外没有明文存在
+- 上一步过程中，对这个private key设置属性，包括CloudHSM的禁止导出属性等，用于提高防护级别
+
+现在进入代码示例。
+
+### 2、在CloudHSM内生成Migration Key非对称密钥
+
+本章节代码见本文开头Github的：src/main/java/com/example/cloudhsm/MigrateProtectKeyStep1.java
+
+执行如下命令创建Migration Key。这里创建非对称密钥用的是RSA4096。
+
+```shell
+mvn clean package
+export HSM_USER=user01
+export HSM_PASSWORD=1qazxsw2
+java -jar target/migrate-protect-key-step1-1.0-SNAPSHOT.jar
+```
+
+创建完毕返回如下：
+
+```shell
+使用用户: user01 连接到CloudHSM...
+RSA-4096 密钥对创建成功！
+密钥标签: migration-key
+公钥算法: RSA
+公钥已保存: ../openssl-key/migration-key-public.pem
+```
+
+此代码会在CloudHSM内生成非对称密钥，其中Private Key明文会保存在密码机内，Public Key会在保存到本机的`../openssl-keys/`目录下，文件名是`migration-key-public.pem`文件。
+
+接下来使用CloudHSM CLI查看CloudHSM内的密钥。
+
+```shell
+/opt/cloudhsm/bin/cloudhsm-cli interactive
+login --username user01 --role crypto-user
+```
+
+输入密码完成登录，执行如下命令查看刚导入的密钥详细属性。
+
+```shell
+key list --filter attr.label=migration-key-public --verbose
+key list --filter attr.label=migration-key-private --verbose
+```
+
+查看密钥返回结果如下：
+
+```shell
+{
+  "error_code": 0,
+  "data": {
+    "matched_keys": [
+      {
+        "key-reference": "0x0000000000001689",
+        "attributes": {
+          "label": "migration-key-private"
+        }
+      },
+      {
+        "key-reference": "0x0000000000002fdd",
+        "attributes": {
+          "label": "TestKeyForPlainTextExport"
+        }
+      },
+      {
+        "key-reference": "0x00000000000032cb",
+        "attributes": {
+          "label": "migration-key-public"
+        }
+      }
+    ],
+    "total_key_count": 3,
+    "returned_key_count": 3
+  }
+}
+```
+
+由此生成migration key完成。
+
+### 3、在AWS云外对被迁移的Private Key的明文做加密
+
+本章节代码见本文开头Github的：src/main/java/com/example/cloudhsm/MigrateProtectKeyStep2.java
+
+现在我们使用一段Java代码模拟在AWS云外对被迁移的Private Key的明文做加密。注意，以下命令模拟的是AWS云外的操作，因此是不需要连接CloudHSM的。即便不使用Java代码，也可以使用其他加密库完成。这里使用的加密算法是RSA-OAEP-SHA512。
+
+```shell
+mvn clean package
+java -jar target/migrate-protect-key-step2-1.0-SNAPSHOT.jar
+```
+
+返回如下：
+
+```shell
+步骤1: 转换 EC 私钥为 PKCS8 DER 格式...
+PKCS8 DER 文件: ../openssl-key/ec_private_key_pkcs8.der
+文件大小: 185 字节
+
+步骤2: 使用 RSA-OAEP-SHA512 加密 PKCS8 密钥...
+公钥文件: ../openssl-key/migration-key-public.pem
+
+加密成功！
+加密文件: ../openssl-key/ec_private_key.pem-encrypted
+文件大小: 512 字节
+```
+
+由此在本地加密了被迁移的Private Key，加密后的密文保存在`../openssl-key/ec_private_key.pem-encrypted`文件中。
+
+### 4、将被迁移的Private Key的密文通过unwrap导入到CloudHSM
+
+本章节代码见本文开头Github的：src/main/java/com/example/cloudhsm/MigrateProtectKeyStep3.java
+
+现在调用CloudHSM，将刚才AWS云外加密好的密文导入到CloudHSM内做unwrap，从而解密出这个密钥的明文。运行如下命令：
+
+```shell
+mvn clean package
+export HSM_USER=user01
+export HSM_PASSWORD=1qazxsw2
+java -jar target/migrate-protect-key-step3-1.0-SNAPSHOT.jar
+```
+
+返回如下：
+
+```shell
+用用户: user01 连接到CloudHSM...
+加密文件大小: 512 字节
+找到 migration-key-private
+EC 私钥已成功 unwrap 导入到 CloudHSM
+密钥标签: imported-ec-key
+密钥算法: EC
+```
+
+导入成功。此时登录CloudHSM CLI查看密钥：
+
+```shell
+/opt/cloudhsm/bin/cloudhsm-cli interactive
+login --username user01 --role crypto-user
+```
+
+输入密码后登录成功，通过密钥标签查看密钥属性。在导入时候使用的标签是`imported-ec-key`。
+
+```shell
+key list --filter attr.label=imported-ec-key --verbose
+```
+
+返回结果可看到导入密钥成功。
+
+```shell
+
+  "error_code": 0,
+  "data": {
+    "matched_keys": [
+      {
+        "key-reference": "0x000000000000124b",
+        "key-info": {
+          "key-owners": [
+            {
+              "username": "user01",
+              "key-coverage": "full"
+            }
+          ],
+          "shared-users": [],
+          "key-quorum-values": {
+            "manage-key-quorum-value": 0,
+            "use-key-quorum-value": 0
+          },
+          "cluster-coverage": "full"
+        },
+        "attributes": {
+          "key-type": "ec",
+          "label": "imported-ec-key",
+          "id": "0x",
+          "check-value": "0xd13f67",
+          "class": "private-key",
+          "encrypt": false,
+          "decrypt": true,
+          "token": true,
+          "always-sensitive": false,
+          "derive": false,
+          "destroyable": true,
+          "extractable": false,
+          "local": false,
+          "modifiable": true,
+          "never-extractable": false,
+          "private": true,
+          "sensitive": true,
+          "sign": true,
+          "trusted": false,
+          "unwrap": true,
+          "verify": false,
+          "wrap": false,
+          "wrap-with-trusted": false,
+          "key-length-bytes": 185,
+          "ec-point": "0x0461048618eb4af2f42cb3ad76ccde9c8ff0d929bce69077e29b3c2cd58fbdb2d16e6124bbfe75f5308e4ada71225f03194398b95d3644f5d68da1082fb1bb6dd7593d67ceae88d2bd2d777ba258fb9c3e0b336547264713a31640bda9bf2ba100f96c",
+          "curve": "secp384r1"
+        }
+      }
+    ],
+    "total_key_count": 1,
+    "returned_key_count": 1
+  }
+}
+```
+
+## 四、不推荐有风险操作例子
+
+注意：本文这里给出的例子不是AWS最佳实践，仅作为代码调试参考用。
+
+### 1、导入Private Key密钥的明文到CloudHSM内
+
+本场景说明：假设有一个在CloudHSM之外生成的密钥对，包含Public Key和Private Key。现在希望将Private Key的明文导入CloudHSM。
+
+本章节代码见本文开头Github的：src/main/java/com/example/cloudhsm/ImportPrivateKeyInPlainText.java
+
+```shell
+# 创建私钥
+openssl ecparam -genkey -name secp384r1 -noout -out ec_private_key.pem
+# 从私钥提取公钥
+openssl ec -in ec_private_key.pem -pubout -out ec_public_key.pem
+# 私钥从 SEC1 转 PKCS#8 格式：
+openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt -in ec_sec1_key.pem -out ec_pkcs8_key.pem
+# 查看私钥
+cat ec_private_key.pem
+```
+
+由此在当前目录下获得`ec_private_key.pem`即私钥。
+
+在Java代码中，调用的路径是`../openssl-key/ec_private_key.pem`，如果路径不一致请自行修改代码。启动Java程序：
+
+```shell
+mvn clean package
+export HSM_USER=user01
+export HSM_PASSWORD=1qazxsw2
+java -jar target/import-key-1.0-SNAPSHOT.jar
+```
+
+成功后返回结果如下。
+
+```shell
+=== CloudHSM EC私钥导入演示（从PEM文件）===
+使用用户: user01 连接到CloudHSM...
+密钥标签: myImportedPrivateKeyFromPEM
+
+--- 开始从PEM文件导入EC私钥为永久密钥 ---
+1. 读取PEM文件: ../openssl-key/ec_private_key.pem
+2. 从SEC1格式提取私钥值...
+   原始密钥字节长度: 48 字节
+3. 创建KeyAttributesMap并设置属性...
+4. 导入密钥到CloudHSM...
+✅ EC私钥导入成功！
+
+--- 验证导入的私钥 ---
+✅ 永久密钥验证成功！
+   签名长度: 102 字节
+   密钥已永久存储在CloudHSM中
+
+✅ EC私钥永久导入成功完成！
+密钥已作为永久密钥存储在CloudHSM中，标签为: myImportedPrivateKeyFromPEM
+```
+
+可看到导入密钥成功。接下来使用CloudHSM CLI查看密钥。
+
+```shell
+/opt/cloudhsm/bin/cloudhsm-cli interactive
+login --username user01 --role crypto-user
+```
+
+输入密码完成登录，执行如下命令查看刚导入的密钥详细属性。
+
+```shell
+key list --filter attr.label=myImportedPrivateKeyFromPEM --verbose
+```
+
+返回结果如下：
+
+```shell
+{
+  "error_code": 0,
+  "data": {
+    "matched_keys": [
+      {
+        "key-reference": "0x0000000000002a29",
+        "key-info": {
+          "key-owners": [
+            {
+              "username": "user01",
+              "key-coverage": "full"
+            }
+          ],
+          "shared-users": [],
+          "key-quorum-values": {
+            "manage-key-quorum-value": 0,
+            "use-key-quorum-value": 0
+          },
+          "cluster-coverage": "full"
+        },
+        "attributes": {
+          "key-type": "ec",
+          "label": "myImportedPrivateKeyFromPEM",
+          "id": "0x",
+          "check-value": "0xd13f67",
+          "class": "private-key",
+          "encrypt": false,
+          "decrypt": true,
+          "token": true,
+          "always-sensitive": false,
+          "derive": false,
+          "destroyable": true,
+          "extractable": false,
+          "local": false,
+          "modifiable": true,
+          "never-extractable": false,
+          "private": true,
+          "sensitive": true,
+          "sign": true,
+          "trusted": false,
+          "unwrap": true,
+          "verify": false,
+          "wrap": false,
+          "wrap-with-trusted": false,
+          "key-length-bytes": 185,
+          "ec-point": "0x0461048618eb4af2f42cb3ad76ccde9c8ff0d929bce69077e29b3c2cd58fbdb2d16e6124bbfe75f5308e4ada71225f03194398b95d3644f5d68da1082fb1bb6dd7593d67ceae88d2bd2d777ba258fb9c3e0b336547264713a31640bda9bf2ba100f96c",
+          "curve": "secp384r1"
+        }
+      }
+    ],
+    "total_key_count": 1,
+    "returned_key_count": 1
+  }
+}
+```
+
+以上就是刚导入的这个密钥明文的详细属性。
+
+### 2、密钥明文导出（不推荐）
+
+本场景说明：假设有一个已经在CloudHSM内生成的密钥，现在希望将此密钥的明文导出。假设密钥的label是`myImportedPrivateKeyFromPEM`。在这种场景下，不使用Key Wrap机制、而是直接调用了key.getEncoded()方法获取密钥明文字节。这是CloudHSM JCE SDK提供的直接导出API。此方法不推荐，将明文导出CloudHSM有安全隐患，建议使用Key wrap机制将密钥加密封装后导出。
+
+本章节代码见本文开头Github的：src/main/java/com/example/cloudhsm/
+
+#### (1) 生成一个可用于导出的密钥
+
+要从CloudHSM导出的密钥需要有`EXTRACTABLE=true`的标签。然而，已经创建好的密钥是不能直接修改标签的，因此CloudHSM的安全设计原则是密钥创建这一刻就决定了能否导出（无论是加密还是非加密），因此一旦创建好的密钥，不能修改。因此在本环节我们重新创建一个AES256密钥，并设置属性为可导出。
+
+```shell
+mvn clean package
+export HSM_USER=user01
+export HSM_PASSWORD=1qazxsw2
+java -jar target/export-key-step1-1.0-SNAPSHOT.jar
+```
+
+返回结果如下。
+
+```shell
+使用用户: user01 连接到CloudHSM...
+AES256密钥创建成功！
+密钥标签: TestKeyForPlainTextExport
+密钥算法: AES
+EXTRACTABLE: true
+```
+
+由此在CloudHSM内创建好了标签为`TestKeyForPlainTextExport`的密钥。
+
+#### (2) CloudHSM的Java SDK需要额外配置允许密钥导出
+
+首先需要在JCE Provider SDK上做额外配置，允许密钥导出。注意是一次性配置，部署CloudHSM初始化阶段配置好，后续代码执行不需要此配置。
+
+```shell
+# 允许Java SDK密钥明文导出
+sudo /opt/cloudhsm/bin/configure-jce --enable-clear-key-extraction-in-software
+```
+配置完成。
+
+如果后续不需要使用密钥明文导出了，使用如下命令关闭。
+
+```shell
+# 禁用Java SDK密钥明文导出
+sudo /opt/cloudhsm/bin/configure-jce --disable-clear-key-extraction-in-software
+```
+
+#### (3) 导出密钥
+
+在Java代码中，密钥导出保存的路径是`../openssl-key/TestKeyForPlainTextExport.pem`，如果路径不存在会报错，请提前准备好目录。启动Java程序：
+
+```shell
+mvn clean package
+export HSM_USER=user01
+export HSM_PASSWORD=1qazxsw2
+java -jar target/export-key-step2-1.0-SNAPSHOT.jar
+```
+
+返回结果如下：
+
+```shell
+使用用户: user01 连接到CloudHSM...
+
+密钥导出成功！
+密钥引用ID: 0x2fdd
+密钥算法: AES
+密钥格式: RAW
+密钥长度: 32 字节
+密钥明文 (Base64): QMGKO38wL/zcReifGktC2xP+oHSCbUc3HwxLZW3iWEQ=
+密钥明文 (Hex): 40c18a3b7f302ffcdc45e89f1a4b42db13fea074826d47371f0c4b656de25844
+
+PEM文件已保存: ../openssl-key/TestKeyForPlainTextExport.pem
+```
+
+导出时候需要注意密钥格式，例如某些场景下，原始密钥格式可能是SEC1 (EC PRIVATE KEY)，而导出后的密钥是PKCS#8 (PRIVATE KEY)，在PEM文本文件看起来是不相同的，但其实是同一个密钥。此时可执行：
+
+```shell
+openssl ec -in /home/ubuntu/environment/cloudhsm/openssl-key/ec_private_key_exported.pem -text -noout 2>&1 | grep -A5 "priv:"
+```
+
+分别对原始密钥和导出的密钥执行以上命令，即可确认导出的是否与原始文件一致。
+
+
+## 五、参考文档
 
 CloudHSM CLI下载
 
@@ -670,6 +1079,14 @@ CloudHSM 用户类型
 
 [https://docs.aws.amazon.com/cloudhsm/latest/userguide/understanding-users.html](https://docs.aws.amazon.com/cloudhsm/latest/userguide/understanding-users.html)
 
+CloudHSM 硬件机能限制（密钥个数等）
+
+[https://docs.aws.amazon.com/cloudhsm/latest/userguide/limits.html](https://docs.aws.amazon.com/cloudhsm/latest/userguide/limits.html)
+
+CloudHSM Performance性能限制
+
+[https://docs.aws.amazon.com/cloudhsm/latest/userguide/performance.html](https://docs.aws.amazon.com/cloudhsm/latest/userguide/performance.html)
+
 CloudHSM JCE Provider SDK下载
 
 [https://docs.aws.amazon.com/cloudhsm/latest/userguide/java-library-install_5.html](https://docs.aws.amazon.com/cloudhsm/latest/userguide/java-library-install_5.html)
@@ -677,5 +1094,13 @@ CloudHSM JCE Provider SDK下载
 HSM user permissions table for CloudHSM CLI
 
 [https://docs.aws.amazon.com/cloudhsm/latest/userguide/user-permissions-table-chsm-cli.html](https://docs.aws.amazon.com/cloudhsm/latest/userguide/user-permissions-table-chsm-cli.html)
+
+CloudHSM用户管理中的仲裁：
+
+[https://docs.aws.amazon.com/zh_cn/cloudhsm/latest/userguide/quorum-auth-chsm-cli.html](https://docs.aws.amazon.com/zh_cn/cloudhsm/latest/userguide/quorum-auth-chsm-cli.html)
+
+CloudHSM密钥管理中的仲裁：
+
+[https://docs.aws.amazon.com/zh_cn/cloudhsm/latest/userguide/key-quorum-auth-chsm-cli.html](https://docs.aws.amazon.com/zh_cn/cloudhsm/latest/userguide/key-quorum-auth-chsm-cli.html)
 
 </details>
