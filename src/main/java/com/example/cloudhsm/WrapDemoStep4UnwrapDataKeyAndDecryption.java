@@ -7,6 +7,7 @@ import com.amazonaws.cloudhsm.jce.provider.attributes.KeyAttributesMap;
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
+import javax.security.auth.Destroyable;
 import java.security.Security;
 import java.util.Base64;
 
@@ -46,7 +47,7 @@ public class WrapDemoStep4UnwrapDataKeyAndDecryption {
             System.out.println("Data Key已成功unwrap导入到CloudHSM");
             
             // Debug信息：验证dataKey是句柄而非明文
-            System.out.println("\n=== Debug: DataKey信息 ===");
+            System.out.println("\n=== Debug: DataKey信息（销毁前） ===");
             System.out.println("DataKey类型: " + dataKey.getClass().getName());
             System.out.println("DataKey算法: " + dataKey.getAlgorithm());
             System.out.println("DataKey格式: " + dataKey.getFormat());
@@ -60,19 +61,34 @@ public class WrapDemoStep4UnwrapDataKeyAndDecryption {
             }
             System.out.println("DataKey对象toString: " + dataKey.toString());
             
-            // 尝试检查是否实现了Destroyable接口
+            // 检查是否实现了Destroyable接口
             if (dataKey instanceof javax.security.auth.Destroyable) {
                 javax.security.auth.Destroyable destroyable = (javax.security.auth.Destroyable) dataKey;
-                System.out.println("DataKey是否已销毁: " + destroyable.isDestroyed());
+                boolean isDestroyed = destroyable.isDestroyed();
+                System.out.println("DataKey当前状态: " + (isDestroyed ? "已销毁" : "未销毁"));
             }
-            System.out.println("=========================\n");
+            System.out.println("==============================\n");
             
             // 解密Step3的加密消息
             String decryptedMessage = decryptMessage(ENCRYPTED_MESSAGE_FROM_STEP3, dataKey);
             System.out.println("使用算法: AES/GCM/NoPadding");
             System.out.println("Step3加密消息: " + ENCRYPTED_MESSAGE_FROM_STEP3);
             System.out.println("解密结果: " + decryptedMessage);
-            System.out.println("Session结束，data key已从CloudHSM中释放");
+            
+            // 显式销毁 data key（使用标准 Destroyable 接口）
+            if (dataKey instanceof Destroyable) {
+                ((Destroyable) dataKey).destroy();
+                System.out.println("\n✓ Data key 已显式销毁");
+                
+                // 销毁后再次检查状态
+                System.out.println("\n=== Debug: DataKey信息（销毁后） ===");
+                Destroyable destroyable = (Destroyable) dataKey;
+                boolean isDestroyed = destroyable.isDestroyed();
+                System.out.println("DataKey当前状态: " + (isDestroyed ? "已销毁 ✓" : "未销毁 ✗"));
+                System.out.println("==============================");
+            }
+            
+            System.out.println("\nSession结束，data key已从CloudHSM中释放");
             
         } catch (Exception e) {
             System.err.println("操作失败: " + e.getMessage());

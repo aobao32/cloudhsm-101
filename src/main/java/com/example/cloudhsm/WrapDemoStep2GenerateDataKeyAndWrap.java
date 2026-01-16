@@ -7,6 +7,7 @@ import com.amazonaws.cloudhsm.jce.provider.attributes.KeyAttributesMap;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
+import javax.security.auth.Destroyable;
 import java.security.Security;
 import java.util.Base64;
 
@@ -44,6 +45,12 @@ public class WrapDemoStep2GenerateDataKeyAndWrap {
             System.out.println("Data Key已被wrap导出:");
             System.out.println("Wrapped Key (Base64): " + wrappedKeyBase64);
             System.out.println("请将此wrapped key用于Step3");
+            
+            // 显式销毁 data key（使用标准 Destroyable 接口）
+            if (dataKey instanceof Destroyable) {
+                ((Destroyable) dataKey).destroy();
+                System.out.println("\n✓ Data key 已显式销毁");
+            }
             
         } catch (Exception e) {
             System.err.println("操作失败: " + e.getMessage());

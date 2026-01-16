@@ -8,6 +8,7 @@ import com.amazonaws.cloudhsm.jce.provider.AesCmacKdfParameterSpec;
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
+import javax.security.auth.Destroyable;
 import java.security.KeyStore;
 import java.security.Security;
 import java.util.Base64;
@@ -57,6 +58,12 @@ public class CloudHSMSessionKeyEncrypt {
             
             System.out.println("=== AES-256-GCM 加密结果 ===");
             System.out.println("密文 (Base64): " + Base64.getEncoder().encodeToString(combined));
+            
+            // 显式销毁 session key（使用标准 Destroyable 接口）
+            if (sessionKey instanceof Destroyable) {
+                ((Destroyable) sessionKey).destroy();
+                System.out.println("\n✓ Session key 已显式销毁");
+            }
 
         } catch (Exception e) {
             System.err.println("加密失败: " + e.getMessage());
@@ -78,6 +85,7 @@ public class CloudHSMSessionKeyEncrypt {
         keyAttrs.put(KeyAttribute.LABEL, "DEVICE_" + deviceId);
         keyAttrs.put(KeyAttribute.SIZE, 256);
         keyAttrs.put(KeyAttribute.TOKEN, false);        // Session Key，不持久化
+        keyAttrs.put(KeyAttribute.EXTRACTABLE, false);  // 不可导出
         keyAttrs.put(KeyAttribute.ENCRYPT, true);
         keyAttrs.put(KeyAttribute.DECRYPT, true);
         

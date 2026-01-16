@@ -9,6 +9,7 @@ import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.GCMParameterSpec;
+import javax.security.auth.Destroyable;
 import java.security.KeyStore;
 import java.security.Security;
 import java.util.Base64;
@@ -61,11 +62,18 @@ public class CloudHSMSessionKeyDecrypt {
             
             System.out.println("=== AES-256-GCM 解密结果 ===");
             System.out.println("明文: " + new String(plaintext, "UTF-8"));
+            
+            // 显式销毁 session key（使用标准 Destroyable 接口）
+            if (sessionKey instanceof Destroyable) {
+                ((Destroyable) sessionKey).destroy();
+                System.out.println("\n✓ Session key 已显式销毁");
+            }
 
         } catch (Exception e) {
             System.err.println("解密失败: " + e.getMessage());
             e.printStackTrace();
         }
+        // JVM 退出时，session 自动关闭，所有 session keys 自动删除
     }
 
     private static SecretKey findKeyByLabel(String keyLabel) throws Exception {
@@ -82,6 +90,7 @@ public class CloudHSMSessionKeyDecrypt {
         keyAttrs.put(KeyAttribute.LABEL, "DEVICE_" + deviceId);
         keyAttrs.put(KeyAttribute.SIZE, 256);
         keyAttrs.put(KeyAttribute.TOKEN, false);        // Session Key，不持久化
+        keyAttrs.put(KeyAttribute.EXTRACTABLE, false);  // 不可导出
         keyAttrs.put(KeyAttribute.ENCRYPT, true);
         keyAttrs.put(KeyAttribute.DECRYPT, true);
         

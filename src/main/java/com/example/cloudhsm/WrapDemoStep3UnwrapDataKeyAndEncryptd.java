@@ -6,6 +6,7 @@ import com.amazonaws.cloudhsm.jce.provider.attributes.KeyAttributesMap;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
+import javax.security.auth.Destroyable;
 import java.security.Security;
 import java.util.Base64;
 
@@ -53,6 +54,13 @@ public class WrapDemoStep3UnwrapDataKeyAndEncryptd {
             System.out.println("使用算法: AES/GCM/NoPadding");
             System.out.println("原始消息: " + testMessage);
             System.out.println("加密结果: " + encryptedMessage);
+            
+            // 显式销毁 data key（使用标准 Destroyable 接口）
+            if (dataKey instanceof Destroyable) {
+                ((Destroyable) dataKey).destroy();
+                System.out.println("\n✓ Data key 已显式销毁");
+            }
+            
             System.out.println("Session结束，data key已从CloudHSM中释放");
             
         } catch (Exception e) {
