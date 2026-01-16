@@ -12,7 +12,7 @@ import java.util.Base64;
 public class WrapDemoStep3UnwrapDataKeyAndEncryptd {
     
     // 从Step2获得的wrapped key常量 - 请替换为实际值
-    private static final String WRAPPED_KEY_BASE64 = "Elob/RRLYZDLZeKRsfhRmsWD162cnghK0PHL12tVIwC925xdacJwYg==";
+    private static final String WRAPPED_KEY_BASE64 = "RrnTldMeA1jTsiiH30ExI7dHs6I/RabQUtG1G4V4Sz7hEpcFyla3RA==";
     
     public static void main(String[] args) {
         try {
@@ -87,6 +87,7 @@ public class WrapDemoStep3UnwrapDataKeyAndEncryptd {
         
         KeyAttributesMap unwrapSpec = new KeyAttributesMap();
         unwrapSpec.put(KeyAttribute.TOKEN, false); // session key
+        unwrapSpec.put(KeyAttribute.EXTRACTABLE, false); // 密钥不可导出
         unwrapSpec.put(KeyAttribute.ENCRYPT, true);
         unwrapSpec.put(KeyAttribute.DECRYPT, true);
         unwrapSpec.put(KeyAttribute.LABEL, "temp-data-key"); // 添加固定label

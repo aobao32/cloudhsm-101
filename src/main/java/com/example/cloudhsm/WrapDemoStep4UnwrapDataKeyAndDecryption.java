@@ -13,9 +13,9 @@ import java.util.Base64;
 public class WrapDemoStep4UnwrapDataKeyAndDecryption {
     
     // 从Step2获得的wrapped key
-    private static final String WRAPPED_KEY_BASE64 = "Elob/RRLYZDLZeKRsfhRmsWD162cnghK0PHL12tVIwC925xdacJwYg==";
+    private static final String WRAPPED_KEY_BASE64 = "RrnTldMeA1jTsiiH30ExI7dHs6I/RabQUtG1G4V4Sz7hEpcFyla3RA==";
     // 从Step3获得的GCM加密消息
-    private static final String ENCRYPTED_MESSAGE_FROM_STEP3 = "fzgilbtJ9/YlMS+vg6cBn3sdobR7GQXer5gO+XRR9zcT57K2jO6T6Yr+TZZgIiscqKTujBOCl3jD+mNUg5FJ6aMmFA==";
+    private static final String ENCRYPTED_MESSAGE_FROM_STEP3 = "4slO01t2BjL6hFC7DH+Ri3BsZE4YABL2leomx+g9uq70A43FLn6ZK3syglWBadT5oqbxKvZnhgKIw4C1yvKyHJk6/Q==";
     
     public static void main(String[] args) {
         try {
@@ -44,6 +44,28 @@ public class WrapDemoStep4UnwrapDataKeyAndDecryption {
             byte[] wrappedKeyBytes = Base64.getDecoder().decode(WRAPPED_KEY_BASE64);
             SecretKey dataKey = unwrapKey(wrappedKeyBytes, masterKey);
             System.out.println("Data Key已成功unwrap导入到CloudHSM");
+            
+            // Debug信息：验证dataKey是句柄而非明文
+            System.out.println("\n=== Debug: DataKey信息 ===");
+            System.out.println("DataKey类型: " + dataKey.getClass().getName());
+            System.out.println("DataKey算法: " + dataKey.getAlgorithm());
+            System.out.println("DataKey格式: " + dataKey.getFormat());
+            byte[] encoded = dataKey.getEncoded();
+            if (encoded == null) {
+                System.out.println("DataKey.getEncoded()返回值: null (密钥材料未导出)");
+            } else {
+                System.out.println("DataKey.getEncoded()返回值: 长度=" + encoded.length);
+                System.out.println("DataKey.getEncoded() Base64: " + Base64.getEncoder().encodeToString(encoded));
+                System.out.println("⚠️  警告：getEncoded()返回了数据，这可能是密钥明文！");
+            }
+            System.out.println("DataKey对象toString: " + dataKey.toString());
+            
+            // 尝试检查是否实现了Destroyable接口
+            if (dataKey instanceof javax.security.auth.Destroyable) {
+                javax.security.auth.Destroyable destroyable = (javax.security.auth.Destroyable) dataKey;
+                System.out.println("DataKey是否已销毁: " + destroyable.isDestroyed());
+            }
+            System.out.println("=========================\n");
             
             // 解密Step3的加密消息
             String decryptedMessage = decryptMessage(ENCRYPTED_MESSAGE_FROM_STEP3, dataKey);
@@ -81,6 +103,7 @@ public class WrapDemoStep4UnwrapDataKeyAndDecryption {
         
         KeyAttributesMap unwrapSpec = new KeyAttributesMap();
         unwrapSpec.put(KeyAttribute.TOKEN, false); // session key
+        unwrapSpec.put(KeyAttribute.EXTRACTABLE, false); // 密钥不可导出
         unwrapSpec.put(KeyAttribute.ENCRYPT, true);
         unwrapSpec.put(KeyAttribute.DECRYPT, true);
         unwrapSpec.put(KeyAttribute.LABEL, "temp-data-key");
