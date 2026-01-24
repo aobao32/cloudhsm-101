@@ -857,7 +857,289 @@ key list --filter attr.label=imported-ec-key --verbose
 }
 ```
 
-## 四、不推荐有风险操作例子
+
+
+## 四、使用mTLS提高访问安全性（可选）
+
+CloudHSM支持在所有客户端请求使用mTLS双向证书认证，包括CloudHSM CLI命令行客户端、JCE Provider SDK等。前文为了快速上手，并未开启这个配置。这里介绍如何开启双向证书验证。
+
+### 1、生成Root证书（带有密码保护）
+
+前文的操作中，我们在本地生成了CA证书，然后上传到CloudHSM进行激活。激活后才可以开始在CloudHSM上创建用户、生成证书。注意，这个CA证书和私钥，是不能用于mTLS验证的。为了安全起见，我们要独立生成一对专用的mTLS证书，仅用于mTLS连接。
+
+在本地开发环境，MacOS或者Linux系统上有最新OpenSSL库的环境上，运行如下命令生成证书。当询问密码时候，为证书设置密码。
+
+```shell
+openssl genrsa -out mtls-ca.key -aes256 4096
+```
+
+由此获得`mtls-ca.key`文件。
+
+接下来生成自签名 Root CA 证书（有效期25年）。
+
+```shell
+openssl req -new -x509 -days 9130 -key mtls-ca.key -out mtls-ca.crt
+```
+
+在回答一系列问题后，获得CA证书`mtls-ca.crt`。
+
+设置文件权限以便于后文使用。
+
+```shell
+chmod 600 mtls-ca.key
+chmod 644 mtls-ca.crt
+```
+
+设置权限完毕。
+
+### 2、生成客户端证书（无密码保护）
+
+生成客户端密钥。这一步不会询问是否设置密码。
+
+```shell
+openssl genrsa -out mtls-client.key 4096
+```
+
+然后在当前目录下获得了`mtls-client.key`文件。
+
+接下来继续生成CSR。
+
+```shell
+openssl req -new -key mtls-client.key -out mtls-client.csr
+```
+
+在运行以上命令时候，需要Common Name字段即CN（通常填写server FQDN or YOUR name），必须与上一步创建的CA证书的Common Name不一样。否则后续证书无法完成mTLS需要的校验。
+
+```shell
+You are about to be asked to enter information that will be incorporated
+into your certificate request.
+What you are about to enter is what is called a Distinguished Name or a DN.
+There are quite a few fields but you can leave some blank
+For some fields there will be a default value,
+If you enter '.', the field will be left blank.
+-----
+Country Name (2 letter code) [AU]:CN
+State or Province Name (full name) [Some-State]:BEIJING
+Locality Name (eg, city) []:BJ
+Organization Name (eg, company) [Internet Widgits Pty Ltd]:bitipcman
+Organizational Unit Name (eg, section) []:DEV
+Common Name (e.g. server FQDN or YOUR name) []:blog.bitipcman.com
+Email Address []:do-not-reply@bitipcman.com
+
+Please enter the following 'extra' attributes
+to be sent with your certificate request
+A challenge password []:
+An optional company name []:
+```
+
+为方便起见，还可以用参数传递，而不用一项项输入。
+
+```shell
+openssl req -new -key mtls-client.key -out mtls-client.csr \
+  -subj "/C=CN/ST=BEIJING/L=BJ/O=bitipcman/OU=DEV/CN=blog.bitipcman.com/emailAddress=do-not-reply@bitipcman.com"
+```
+
+创建CSR完毕。当前目录下获得`mtls-client.csr`文件。
+
+接下来CA签署。输入如下命令。
+
+```shell
+openssl x509 -req -days 3650 -in mtls-client.csr \
+  -CA mtls-ca.crt -CAkey mtls-ca.key -CAcreateserial \
+  -out mtls-client.crt
+```
+
+在CA签署的时候，会要求输入上一步创建CA证书时候设置的密码。输入后，签署成功。
+
+```shell
+Certificate request self-signature ok
+subject=C = CN, ST = BEIJING, L = BJ, O = bitipcman, OU = DEV, CN = blog.bitipcman.com, emailAddress = do-not-reply@bitipcman.com
+Enter pass phrase for mtls-ca.key:
+```
+
+由此获得了`mtls-client.crt`文件。
+
+拼接设置证书链。
+
+```shell
+# 创建客户端证书链（客户端证书 + Root CA）
+cat mtls-client.crt mtls-ca.crt > mtls-client.pem
+```
+
+执行如下命令验证证书链：
+
+```shell
+openssl verify -CAfile mtls-ca.crt mtls-client.crt
+```
+
+返回OK标识正常。
+
+设置文件权限：
+
+```shell
+chmod 600 mtls-client.key
+chmod 644 mtls-client.crt mtls-client.pem
+```
+
+接下来需要妥善的、安全的保管有关证书密钥。其中`mtls-ca.crt`需要注册到CloudHSM作为Trust Anchor，而客户端SDK需要使用`mtls-client.pem`标识请求方自己的身份。
+
+### 3、在CloudHSM上将CA注册为Trust Anchor
+
+首先使用CloudHSM CLI，以没有mTLS的方式正常登陆到CloudHSM。
+
+```shell
+/opt/cloudhsm/bin/cloudhsm-cli interactive
+```
+
+然后以admin身份登录。注意mTLS管理设置必须使用admin，普通crypto user身份只能用于密钥加解密。
+
+```shell
+login --username admin --role admin
+```
+
+登陆成功后，执行如下命令。执行操作前，需要确保CA文件路径正确。
+
+```shell
+cluster mtls register-trust-anchor --path /home/ubuntu/environment/cloudhsm/mTLS/mtls-ca.crt
+```
+
+执行成功后，返回结果如下：
+
+```shell
+{
+  "error_code": 0,
+  "data": {
+    "trust_anchor": {
+      "certificate-reference": "0x01",
+      "certificate": "-----BEGIN CERTIFICATE-----\nxxxxxxxxxxx
+      xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+      xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+      xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+      xxxxxxxx=\n-----END CERTIFICATE-----\n",
+      "cluster-coverage": "full"
+    }
+  }
+}
+```
+
+注意这里的trust_anchor的ID是`0x01`。执行如下命令确认下注册成功。
+
+```shell
+cluster mtls list-trust-anchors
+```
+
+现在可以执行`quit`退出CloudHSM CLI。
+
+注意此时CloudHSM同时允许非mTLS连接和mTLS连接，我们要使用mTLS方式连接测试认证通过后，才会开启强制mTLS的参数。
+
+### 4、在CloudHSM CLI上使用双向证书
+
+将客户端证书复制到要执行CloudHSM CLI的环境的指定路径下，并使用chown命令设置为当前操作用户为文件owner，然后设置路径。
+
+```shell
+sudo cp mtls-client.pem /opt/cloudhsm/etc/
+sudo cp mtls-client.key /opt/cloudhsm/etc/
+sudo chown ubuntu:ubuntu /opt/cloudhsm/etc/mtls-client.key
+sudo chown ubuntu:ubuntu /opt/cloudhsm/etc/mtls-client.pem
+chmod 600 /opt/cloudhsm/etc/mtls-client.key
+chmod 644 /opt/cloudhsm/etc/mtls-client.pem
+```
+
+为CloudHSM CLI配置mTLS连接到其配置文件：
+
+```shell
+sudo /opt/cloudhsm/bin/configure-cli \
+  --client-cert-hsm-tls-file /opt/cloudhsm/etc/mtls-client.pem \
+  --client-key-hsm-tls-file /opt/cloudhsm/etc/mtls-client.key
+```
+
+配置成功的话，不会有任何输出（没有报错就是成功）。
+
+现在做下mTLS的连接测试。
+
+```shell
+/opt/cloudhsm/bin/cloudhsm-cli interactive
+```
+
+用一般操作者身份登陆：
+
+```shell
+login --username user01 --role crypto-user
+```
+
+输入密码，登陆成功。
+
+### 5、在JCE Provider SDK上使用双向证书
+
+上一步完成了对CloudHSM CLI配置mTLS的过程。接下来配置JCE Provider SDK。JCE Provider SDK和CloudHSM CLI一样，也有一个配置文件，我们需要修改这个配置文件，加入mTLS的证书设置。
+
+将证书复制到正确的路径下（与CloudHSM CLI的路径和权限要求一致）。
+
+```shell
+sudo cp mtls-client.pem /opt/cloudhsm/etc/
+sudo cp mtls-client.key /opt/cloudhsm/etc/
+sudo chown ubuntu:ubuntu /opt/cloudhsm/etc/mtls-client.key
+sudo chown ubuntu:ubuntu /opt/cloudhsm/etc/mtls-client.pem
+chmod 600 /opt/cloudhsm/etc/mtls-client.key
+chmod 644 /opt/cloudhsm/etc/mtls-client.pem
+```
+
+执行如下命令完成配置。
+
+```shell
+sudo /opt/cloudhsm/bin/configure-jce \
+  --client-cert-hsm-tls-file /opt/cloudhsm/etc/mtls-client.pem \
+  --client-key-hsm-tls-file /opt/cloudhsm/etc/mtls-client.key
+```
+
+配置成功的话，不会有任何输出（没有报错就是成功）。
+
+现在运行Java程序，测试访问成功。
+
+### 6、开启强制要求mTLS认证
+
+当CloudHSM CLI和Java SDK都使用mTLS连接测试成功后，可以打开强制使用mTLS的开关了。首先用CloudHSM CLI连接上去。注意这里必须是已经使用mTLS的方式连接，才可以打开强制mTLS的配置。
+
+```shell
+/opt/cloudhsm/bin/cloudhsm-cli interactive
+```
+
+使用管理员身份登陆：
+
+```shell
+login --username admin --role admin
+```
+
+执行命令：
+
+```shell
+cluster mtls set-enforcement --level cluster
+```
+
+返回如下信息标识成功：
+
+```shell
+{
+  "error_code": 0,
+  "data": {
+    "message": "Mtls enforcement level set to Cluster successfully"
+  }
+}
+```
+
+从这一刻起，非mTLS的会话已经无法登陆了，并且如果此时有非mTLS的长连接一直存在，也会被终止掉，只有后续mTLS能连接。
+
+### 7、注意事项
+
+在hsm2m.medium机型上，最多支持同时注册2个trust anchors。如果需要替换，未来可以使用如下命令删除：
+
+```shell
+cluster mtls deregister-trust-anchor --certificate-reference 0x01
+```
+
+即可删除已经设置的CA。
+
+## 五、不推荐有风险操作例子
 
 注意：本文这里给出的例子不是AWS最佳实践，仅作为代码调试参考用。
 
@@ -1069,7 +1351,7 @@ openssl ec -in /home/ubuntu/environment/cloudhsm/openssl-key/ec_private_key_expo
 分别对原始密钥和导出的密钥执行以上命令，即可确认导出的是否与原始文件一致。
 
 
-## 五、参考文档
+## 六、参考文档
 
 CloudHSM CLI下载
 
@@ -1102,5 +1384,9 @@ CloudHSM用户管理中的仲裁：
 CloudHSM密钥管理中的仲裁：
 
 [https://docs.aws.amazon.com/zh_cn/cloudhsm/latest/userguide/key-quorum-auth-chsm-cli.html](https://docs.aws.amazon.com/zh_cn/cloudhsm/latest/userguide/key-quorum-auth-chsm-cli.html)
+
+使用mTLS双向证书认证：
+
+[https://docs.aws.amazon.com/cloudhsm/latest/userguide/getting-started-setup-mtls.html](https://docs.aws.amazon.com/cloudhsm/latest/userguide/getting-started-setup-mtls.html)
 
 </details>
