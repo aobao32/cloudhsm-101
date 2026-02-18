@@ -51,6 +51,9 @@ public class CloudHSMKeyGenerator {
      * @return 生成的 AES 密钥
      */
     public static SecretKey createPersistentAES256Key(String keyLabel) throws Exception {
+        if (keyLabel == null || keyLabel.isBlank()) {
+            throw new IllegalArgumentException("keyLabel must not be null or blank");
+        }
         // SDK 5 方式：使用 KeyAttributesMap 替代 CaviumAESKeyGenParameterSpec
         KeyGenerator keyGen = KeyGenerator.getInstance("AES", CloudHsmProvider.PROVIDER_NAME);
         
