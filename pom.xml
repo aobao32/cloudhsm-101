@@ -728,6 +728,41 @@
                                     <finalName>migrate-protect-key-step3-${project.version}</finalName>
                                 </configuration>
                             </execution>
+                            <!-- 执行19：构建密钥生成并下载明文程序 -->
+                            <execution>
+                                <id>keygen-and-download-jar</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>shade</goal>
+                                </goals>
+                                <configuration>
+                                    <createDependencyReducedPom>false</createDependencyReducedPom>
+                                    <shadedArtifactAttached>true</shadedArtifactAttached>
+                                    <shadedClassifierName>keygen-and-download</shadedClassifierName>
+                                    <transformers>
+                                        <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                            <mainClass>com.example.cloudhsm.CloudHSMKeyGeneratorAndDownload</mainClass>
+                                        </transformer>
+                                    </transformers>
+                                    <filters>
+                                        <filter>
+                                            <artifact>*:*</artifact>
+                                            <excludes>
+                                                <exclude>META-INF/*.SF</exclude>
+                                                <exclude>META-INF/*.DSA</exclude>
+                                                <exclude>META-INF/*.RSA</exclude>
+                                                <exclude>META-INF/MANIFEST.MF</exclude>
+                                            </excludes>
+                                        </filter>
+                                    </filters>
+                                    <artifactSet>
+                                        <includes>
+                                            <include>*:*</include>
+                                        </includes>
+                                    </artifactSet>
+                                    <finalName>cloudhsm-keygen-and-download-${project.version}</finalName>
+                                </configuration>
+                            </execution>
                         </executions>
                     </plugin>
                 </plugins>
