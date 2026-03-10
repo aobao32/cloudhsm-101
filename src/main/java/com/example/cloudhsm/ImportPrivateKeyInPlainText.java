@@ -50,7 +50,7 @@ public class ImportPrivateKeyInPlainText {
     public static PrivateKey importECPrivateKeyFromPEM(String keyLabel) throws Exception {
         System.out.println("\n--- 开始从PEM文件导入EC私钥为永久密钥 ---");
         
-        String pemFilePath = "../openssl-key/ec_private_key.pem";
+        String pemFilePath = "../test-key/ec_private_key.pem";
         System.out.println("1. 读取PEM文件: " + pemFilePath);
         String pemContent = new String(Files.readAllBytes(Paths.get(pemFilePath)));
         
